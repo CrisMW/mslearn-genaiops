@@ -31,7 +31,7 @@ To complete the tasks in this exercise, you need:
 - Azure subscription with Microsoft Foundry access
 - Git and [GitHub](https://github.com) account
 - Python 3.9 or later
-- Azure CLI and Azure Developer CLI (azd) installed
+- Azure CLI installed
 
 > **Tip**: If you haven't installed these prerequisites yet, see [Lab 00: Prerequisites](00-prerequisites.md) for installation instructions and links.
 
@@ -59,21 +59,13 @@ After creating your repository, clone it to your local machine.
 
 ### Deploy Microsoft Foundry resources
 
-Now you'll use the Azure Developer CLI to deploy all required Azure resources.
+Now you'll use the Azure CLI to deploy all required Azure resources.
 
 1. In Visual Studio Code, open a terminal by selecting **Terminal** > **New Terminal** from the menu.
 
-1. Authenticate with Azure Developer CLI:
-
-    ```powershell
-    azd auth login
-    ```
-
-    This opens a browser window for Azure authentication. Sign in with your Azure credentials.
-
 1. Authenticate with Azure CLI:
 
-    ```powershell
+    ```bash
     az login
     ```
 
@@ -82,46 +74,44 @@ Now you'll use the Azure Developer CLI to deploy all required Azure resources.
     > ⚠️ **Important**
     > In some environments, the VS Code integrated terminal may crash or close during the interactive login flow.
     > If this happens, use device code authentication instead:
-    > ```powershell
+    > ```bash
     > az login --use-device-code
     > ```
 
-1. Provision resources:
+1. Deploy into the existing resource group, reusing the existing Foundry account and project:
 
-    ```powershell
-    azd up
+    ```bash
+    export AZURE_ENV_NAME="trail-guide"
+    export AZURE_LOCATION="swedencentral"
+    export AZURE_AI_ACCOUNT_NAME="aif-swecen-bsmj-claude"
+    export AZURE_AI_PROJECT_NAME="proj-default"
+    export ASSIGN_LOCAL_USER_FOUNDRY_ROLE="false"
+    export ENABLE_HOSTED_AGENTS="false"
+    export AZURE_PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv)
+    az deployment group create --resource-group rg-swo-ds-sandbox-lab --name trail-guide-infra --parameters infra/main.bicepparam
     ```
 
-    > **Note**: If `azd up` fails because the default model deployment is unavailable in your region, update the `aiProjectDeploymentsJson` block in `infra/main.bicep` to a compatible model and rerun the command.
+    > **Note**: If the deployment fails because the default model is unavailable in your region, update the `aiProjectDeploymentsJson` block in `infra/main.bicep` to a compatible model and rerun the deployment command.
 
-    When prompted, provide:
-    - **Environment name** (e.g., `dev`, `test`) - Used to name all resources
-    - **Azure subscription** - Where resources will be created
-    - **Location** - Azure region (recommended: Sweden Central)
+    `AZURE_ENV_NAME` is used to tag and name the resources and `AZURE_LOCATION` sets the region (recommended: Sweden Central). Run `az account set --subscription <subscription-id>` first if you need a different subscription.
 
     The command deploys the infrastructure from the `infra\` folder, creating:
-    - **Resource Group** - Container for all resources
-    - **Foundry (AI Services)** - The hub with access to models like GPT-5.1
-    - **Foundry Project** - Your workspace for creating and managing agents
+    - **Resource Group** - Existing `rg-swo-ds-sandbox-lab`, not created or modified
+    - **Foundry (AI Services)** - Existing account `aif-swecen-bsmj-claude`, reused as is
+    - **Foundry Project** - Existing project `proj-default`, reused as is
     - **Log Analytics Workspace** - Collects logs and telemetry data
     - **Application Insights** - Monitors performance and usage
 
 1. Create a `.env` file with the environment variables:
 
-    ```powershell
-    azd env get-values > .env
+    ```bash
+    az deployment group show --resource-group rg-swo-ds-sandbox-lab --name trail-guide-infra --query properties.outputs -o json \
+      | jq -r 'to_entries[] | "\(.key | ascii_upcase)=\"\(.value.value)\""' > .env
+    echo "AZURE_SUBSCRIPTION_ID=\"$(az account show --query id -o tsv)\"" >> .env
     ```
 
     This creates a `.env` file in your project root with all the provisioned resource information.
 
-    > ⚠️ **Important – File Encoding**
-    >
-    > After generating the `.env` file, make sure it is saved using **UTF-8** encoding.
-    >
-    > In editors like **VS Code**, check the encoding indicator in the bottom-right corner.  
-    > If it shows **UTF-16 LE** (or any encoding other than UTF-8), click it, choose **Save with Encoding**, and select **UTF-8**.
-    >
-    > Using the wrong encoding may cause environment variables to be read incorrectly.
 
     This creates a `.env` file in your project root with all the provisioned resource information.
 
@@ -131,14 +121,14 @@ With your Azure resources deployed, install the required Python packages.
 
 1. In the VS Code terminal, create and activate a virtual environment:
 
-    ```powershell
+    ```bash
     python -m venv .venv
-    .venv\Scripts\Activate.ps1
+    source .venv/bin/activate
     ```
 
 1. Install the required dependencies:
 
-    ```powershell
+    ```bash
     python -m pip install -r requirements.txt
     ```
 
@@ -186,7 +176,7 @@ Before running anything, take a moment to review what `src/tests/run_monitoring.
 
 1. In the VS Code terminal, run the script:
 
-    ```powershell
+    ```bash
     python src/tests/run_monitoring.py
     ```
 
@@ -206,7 +196,7 @@ Before running anything, take a moment to review what `src/tests/run_monitoring.
 
     Run:
 
-    ```powershell
+    ```bash
     python src/tests/check_traces.py
     ```
 
@@ -277,7 +267,7 @@ The `check_traces.py` output gives you the full span tree for each version run �
 
 1. Run the trace viewer script:
 
-    ```powershell
+    ```bash
     python src/tests/check_traces.py
     ```
 
@@ -326,7 +316,7 @@ If you completed [Lab 03: Design and optimize prompts](03-design-optimize-prompt
 
 1. Run the script again:
 
-    ```powershell
+    ```bash
     python src/tests/run_monitoring.py
     ```
 

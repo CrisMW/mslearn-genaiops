@@ -26,7 +26,7 @@ To complete the tasks in this exercise, you need:
 - Azure subscription with Microsoft Foundry access
 - Git and [GitHub](https://github.com) account
 - Python 3.9 or later
-- Azure CLI and Azure Developer CLI (azd) installed
+- Azure CLI installed
 
 > **Tip**: If you haven't installed these prerequisites yet, see [Lab 00: Prerequisites](00-prerequisites.md) for installation instructions and links.
 
@@ -54,21 +54,13 @@ After creating your repository, clone it to your local machine.
 
 ### Deploy Microsoft Foundry resources
 
-Now you'll use the Azure Developer CLI to deploy all required Azure resources.
+Now you'll use the Azure CLI to deploy all required Azure resources.
 
 1. In Visual Studio Code, open a terminal by selecting **Terminal** > **New Terminal** from the menu.
 
-1. Authenticate with Azure Developer CLI:
-
-    ```powershell
-    azd auth login
-    ```
-
-    This opens a browser window for Azure authentication. Sign in with your Azure credentials.
-
 1. Authenticate with Azure CLI:
 
-    ```powershell
+    ```bash
     az login
     ```
 
@@ -77,44 +69,42 @@ Now you'll use the Azure Developer CLI to deploy all required Azure resources.
     > ⚠️ **Important**
     > In some environments, the VS Code integrated terminal may crash or close during the interactive login flow.
     > If this happens, use device code authentication instead:
-    > ```powershell
+    > ```bash
     > az login --use-device-code
     > ```
 
-1. Provision resources:
+1. Deploy into the existing resource group, reusing the existing Foundry account and project:
 
-    ```powershell
-    azd up
+    ```bash
+    export AZURE_ENV_NAME="trail-guide"
+    export AZURE_LOCATION="swedencentral"
+    export AZURE_AI_ACCOUNT_NAME="aif-swecen-bsmj-claude"
+    export AZURE_AI_PROJECT_NAME="proj-default"
+    export ASSIGN_LOCAL_USER_FOUNDRY_ROLE="false"
+    export ENABLE_HOSTED_AGENTS="false"
+    export AZURE_PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv)
+    az deployment group create --resource-group rg-swo-ds-sandbox-lab --name trail-guide-infra --parameters infra/main.bicepparam
     ```
 
-    > **Note**: If `azd up` fails because the default model deployment is unavailable in your region, update the `aiProjectDeploymentsJson` block in `infra/main.bicep` to a compatible model and rerun the command.
+    > **Note**: If the deployment fails because the default model is unavailable in your region, update the `aiProjectDeploymentsJson` block in `infra/main.bicep` to a compatible model and rerun the deployment command.
 
-    When prompted, provide:
-    - **Environment name** (e.g., `dev`, `test`) - Used to name all resources
-    - **Azure subscription** - Where resources will be created
-    - **Location** - Azure region (recommended: Sweden Central)
+    `AZURE_ENV_NAME` is used to tag and name the resources and `AZURE_LOCATION` sets the region (recommended: Sweden Central). Run `az account set --subscription <subscription-id>` first if you need a different subscription.
 
     The command deploys the infrastructure from the `infra\` folder, creating:
-    - **Resource Group** - Container for all resources
-    - **Foundry (AI Services)** - The hub with access to models like GPT-5.1
-    - **Foundry Project** - Your workspace for creating and managing prompts
+    - **Resource Group** - Existing `rg-swo-ds-sandbox-lab`, not created or modified
+    - **Foundry (AI Services)** - Existing account `aif-swecen-bsmj-claude`, reused as is
+    - **Foundry Project** - Existing project `proj-default`, reused as is
     - **Log Analytics Workspace** - Collects logs and telemetry data
     - **Application Insights** - Monitors performance and usage
 
 1. Create a `.env` file with the environment variables:
 
-    ```powershell
-    azd env get-values > .env
+    ```bash
+    az deployment group show --resource-group rg-swo-ds-sandbox-lab --name trail-guide-infra --query properties.outputs -o json \
+      | jq -r 'to_entries[] | "\(.key | ascii_upcase)=\"\(.value.value)\""' > .env
+    echo "AZURE_SUBSCRIPTION_ID=\"$(az account show --query id -o tsv)\"" >> .env
     ```
 
-    > ⚠️ **Important – File Encoding**
-    >
-    > After generating the `.env` file, make sure it is saved using **UTF-8** encoding.
-    >
-    > In editors like **VS Code**, check the encoding indicator in the bottom-right corner.  
-    > If it shows **UTF-16 LE** (or any encoding other than UTF-8), click it, choose **Save with Encoding**, and select **UTF-8**.
-    >
-    > Using the wrong encoding may cause environment variables to be read incorrectly.
 
     This creates a `.env` file in your project root with all the provisioned resource information.
 
@@ -124,14 +114,14 @@ With your Azure resources deployed, install the required Python packages.
 
 1. In the VS Code terminal, create and activate a virtual environment:
 
-    ```powershell
+    ```bash
     python -m venv .venv
-    .venv\Scripts\Activate.ps1
+    source .venv/bin/activate
     ```
 
 1. Install the required dependencies:
 
-    ```powershell
+    ```bash
     python -m pip install -r requirements.txt
     ```
 
@@ -210,7 +200,7 @@ The baseline provides:
 
 1. Verify you're on the main branch:
 
-    ```powershell
+    ```bash
     git checkout main
     ```
 
@@ -236,12 +226,12 @@ The baseline provides:
     > ⚠️ **First-time Git setup**
     >
     > If Git reports `Author identity unknown`, configure your identity once before committing:
-    > ```powershell
+    > ```bash
     > git config --global user.name "Your GitHub Username"
     > git config --global user.email "your-email@example.com"
     > ```
 
-    ```powershell
+    ```bash
     git add src/agents/trail_guide_agent/trail_guide_agent.py
     git commit -m "Set baseline agent configuration to v3 prompt"
     ```
@@ -250,7 +240,7 @@ The baseline provides:
 
 1. Deploy the baseline agent:
 
-    ```powershell
+    ```bash
     python src/agents/trail_guide_agent/trail_guide_agent.py
     ```
 
@@ -260,7 +250,7 @@ The baseline provides:
 
 1. Run batch tests to capture baseline responses:
 
-    ```powershell
+    ```bash
     python src/tests/run_batch_tests.py baseline
     ```
 
@@ -268,7 +258,7 @@ The baseline provides:
 
 1. Review the captured responses:
 
-    ```powershell
+    ```bash
     cat experiments/baseline/agent-responses.json
     ```
 
@@ -301,20 +291,20 @@ Each optimization experiment lives in its own branch, keeping experimental chang
 
 1. In the VS Code terminal, ensure you're in the repository root:
 
-    ```powershell
+    ```bash
     cd /path/to/mslearn-genaiops
     ```
 
 1. Ensure you're on the main branch with latest changes:
 
-    ```powershell
+    ```bash
     git checkout main
     git pull origin main
     ```
 
 1. Create an experiment branch for testing the optimized-concise prompt:
 
-    ```powershell
+    ```bash
     git checkout -b experiment/optimized-concise
     ```
 
@@ -326,7 +316,7 @@ The test prompts are already created in the `src/tests/test-prompts/` folder.
 
 1. List the test prompt files:
 
-    ```powershell
+    ```bash
     ls src/tests/test-prompts/
     ```
 
@@ -339,7 +329,7 @@ The test prompts are already created in the `src/tests/test-prompts/` folder.
 
 1. Examine one of the test prompts:
 
-    ```powershell
+    ```bash
     cat src/tests/test-prompts/day-hike-gear.txt
     ```
 
@@ -366,7 +356,7 @@ Modify the agent script to use the optimized-concise prompt (v4).
 
 1. Save the file and commit this change to your experiment branch:
 
-    ```powershell
+    ```bash
     git add src/agents/trail_guide_agent/trail_guide_agent.py
     git commit -m "Configure agent to use v4 optimized-concise prompt"
     ```
@@ -379,7 +369,7 @@ Deploy the agent with the v4 prompt and capture responses from all test prompts.
 
 1. Create/update the agent version from the repository root:
 
-    ```powershell
+    ```bash
     python src/agents/trail_guide_agent/trail_guide_agent.py
     ```
 
@@ -390,7 +380,7 @@ Deploy the agent with the v4 prompt and capture responses from all test prompts.
 
 1. Run the batch test script to test with all prompts:
 
-    ```powershell
+    ```bash
     python src/tests/run_batch_tests.py optimized-concise
     ```
 
@@ -434,7 +424,7 @@ Deploy the agent with the v4 prompt and capture responses from all test prompts.
 
 1. Review the captured responses:
 
-    ```powershell
+    ```bash
     cat experiments/optimized-concise/agent-responses.json
     ```
 
@@ -446,7 +436,7 @@ Review the agent responses and create an evaluation CSV with quality scores.
 
 1. Create a new file `experiments/optimized-concise/evaluation.csv`:
 
-    ```powershell
+    ```bash
     New-Item experiments/optimized-concise/evaluation.csv
     ```
 
@@ -470,7 +460,7 @@ Review the agent responses and create an evaluation CSV with quality scores.
 
 1. Commit your experiment results:
 
-    ```powershell
+    ```bash
     git add experiments/optimized-concise/
     git commit -m "Complete optimized-concise experiment with evaluation"
     git tag experiment-1-optimized-concise
@@ -488,7 +478,7 @@ Determine if an alternate lower-cost model available in your region can maintain
 
 1. Create a new experiment branch:
 
-    ```powershell
+    ```bash
     git checkout experiment/optimized-concise
     git checkout -b experiment/alternate-model
     ```
@@ -509,20 +499,20 @@ Determine if an alternate lower-cost model available in your region can maintain
 
 1. Commit this configuration:
 
-    ```powershell
+    ```bash
     git add src/agents/trail_guide_agent/trail_guide_agent.py
     git commit -m "Configure agent to use alternate regional model with v4 prompt"
     ```
 
 1. Deploy the agent with the alternate model:
 
-    ```powershell
+    ```bash
     python src/agents/trail_guide_agent/trail_guide_agent.py
     ```
 
 1. Run batch tests with the same test prompts:
 
-    ```powershell
+    ```bash
     python src/tests/run_batch_tests.py alternate-model
     ```
 
@@ -539,7 +529,7 @@ Determine if an alternate lower-cost model available in your region can maintain
 
 1. Commit experiment results:
 
-    ```powershell
+    ```bash
     git add experiments/alternate-model/
     git commit -m "Complete alternate model experiment with evaluation"
     git tag experiment-2-alternate-model
@@ -555,7 +545,7 @@ After completing baseline and both optimization experiments, use your CSV data t
 
 1. List all experiment branches:
 
-    ```powershell
+    ```bash
     git branch | Select-String "experiment/"
     ```
 
@@ -573,7 +563,7 @@ Use the CSV files to compare experiments side-by-side.
 
 1. Open all three CSV files for comparison:
 
-    ```powershell
+    ```bash
     code experiments/baseline/evaluation.csv
     code experiments/optimized-concise/evaluation.csv
     code experiments/alternate-model/evaluation.csv
@@ -603,13 +593,13 @@ Use Git to merge the winning experiment to main.
 
 1. Checkout main branch:
 
-    ```powershell
+    ```bash
     git checkout main
     ```
 
 1. Merge the winning experiment:
 
-    ```powershell
+    ```bash
     git merge experiment/optimized-concise -m "Merge optimized-concise prompt experiment
 
 Approved optimization reduces prompt tokens by 42% while maintaining quality.
@@ -634,7 +624,7 @@ Evaluation results: experiments/optimized-concise/evaluation.csv"
 
 1. If you had to resolve a merge conflict in the previous step, commit the resolved file:
 
-    ```powershell
+    ```bash
     git add src/agents/trail_guide_agent/trail_guide_agent.py
     git commit -m "Update agent to use optimized-concise prompt (v4)"
     ```
@@ -643,7 +633,7 @@ Evaluation results: experiments/optimized-concise/evaluation.csv"
 
 1. Create a production release tag:
 
-    ```powershell
+    ```bash
     git tag -a v4-optimized-prompt -m "Release v4: Token-optimized prompts
 
 Changes:
@@ -657,7 +647,7 @@ Migration: Update trail_guide_agent.py to use v4_optimized_concise.txt"
 
 1. Push changes to GitHub:
 
-    ```powershell
+    ```bash
     git push origin main
     git push origin experiment/optimized-concise
     git push origin experiment/gpt5mini

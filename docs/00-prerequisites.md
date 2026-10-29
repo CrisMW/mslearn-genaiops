@@ -84,32 +84,6 @@ The Azure Command-Line Interface (CLI) is used to authenticate and interact with
 - **macOS**: [Install Azure CLI on macOS](https://learn.microsoft.com/cli/azure/install-azure-cli-macos)
 - **Linux**: [Install Azure CLI on Linux](https://learn.microsoft.com/cli/azure/install-azure-cli-linux)
 
-### Azure Developer CLI (azd)
-
-The Azure Developer CLI is used to provision Azure infrastructure and manage deployments.
-
-- **Download Azure Developer CLI**: [https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- **Installation guide**: [Install or update Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- **Verify installation**:
-  ```bash
-  azd version
-  # Should show Azure Developer CLI version 1.5.0 or later
-  ```
-
-**Platform-specific installation**:
-- **Windows**:
-  ```powershell
-  winget install microsoft.azd
-  ```
-- **macOS**:
-  ```bash
-  brew tap azure/azd && brew install azd
-  ```
-- **Linux**:
-  ```bash
-  curl -fsSL https://aka.ms/install-azd.sh | bash
-  ```
-
 ## Verification checklist
 
 Before starting the labs, verify all prerequisites are installed:
@@ -126,26 +100,19 @@ git --version
 
 # Check Azure CLI
 az --version
-
-# Check Azure Developer CLI
-azd version
 ```
 
 All commands should return version numbers without errors.
 
 ## Authenticate with Azure
 
-After installing the Azure CLI and Azure Developer CLI, authenticate with your Azure account:
+After installing the Azure CLI, authenticate with your Azure account:
 
 ```bash
-# Authenticate Azure CLI
 az login
-
-# Authenticate Azure Developer CLI
-azd auth login
 ```
 
-Both commands will open a browser window for authentication. Sign in with your Azure credentials.
+This command will open a browser window for authentication. Sign in with your Azure credentials.
 
 > ⚠️ **Important**
 > In some environments, the VS Code integrated terminal may crash or close during the interactive login flow.
@@ -167,11 +134,6 @@ Both commands will open a browser window for authentication. Sign in with your A
 - Clear cached credentials: `az account clear`
 - Try authenticating again: `az login`
 - Check your internet connection and firewall settings
-
-**azd command not recognized**:
-- Restart your terminal after installation
-- Verify installation with: `azd version`
-- Check PATH environment variable includes azd installation directory
 
 **Git authentication issues with GitHub**:
 - Use SSH keys: [Generating a new SSH key](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent)

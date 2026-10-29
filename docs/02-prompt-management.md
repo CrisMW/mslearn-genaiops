@@ -26,7 +26,7 @@ To complete the tasks in this exercise, you need:
 - Azure subscription with Microsoft Foundry access
 - Git and [GitHub](https://github.com) account
 - Python 3.9 or later
-- Azure CLI and Azure Developer CLI (azd) installed
+- Azure CLI installed
 
 All steps in this lab will be performed using Visual Studio Code and its integrated terminal.
 
@@ -52,23 +52,15 @@ After creating your repository, clone it to your local machine.
 
 ### Deploy Microsoft Foundry resources
 
-Now you'll use the Azure Developer CLI to deploy all required Azure resources.
+Now you'll use the Azure CLI to deploy all required Azure resources.
 
-> **Note**: This lab uses infrastructure-as-code (IaC) deployment with `azd` because it follows GenAIOps best practices and makes the lab accessible as a standalone exercise. This approach ensures consistent, reproducible environments while teaching real-world deployment patterns.
+> **Note**: This lab uses infrastructure-as-code (IaC) deployment with Bicep because it follows GenAIOps best practices and makes the lab accessible as a standalone exercise. This approach ensures consistent, reproducible environments while teaching real-world deployment patterns.
 
 1. In Visual Studio Code, open a terminal by selecting **Terminal** > **New Terminal** from the menu.
 
-1. Authenticate with Azure Developer CLI:
-
-    ```powershell
-    azd auth login
-    ```
-
-    This opens a browser window for Azure authentication. Sign in with your Azure credentials.
-
 1. Authenticate with Azure CLI:
 
-    ```powershell
+    ```bash
     az login
     ```
 
@@ -77,44 +69,42 @@ Now you'll use the Azure Developer CLI to deploy all required Azure resources.
     > ⚠️ **Important**
     > In some environments, the VS Code integrated terminal may crash or close during the interactive login flow.
     > If this happens, use device code authentication instead:
-    > ```powershell
+    > ```bash
     > az login --use-device-code
     > ```
 
-1. Provision resources:
+1. Deploy into the existing resource group, reusing the existing Foundry account and project:
 
-    ```powershell
-    azd up
+    ```bash
+    export AZURE_ENV_NAME="trail-guide"
+    export AZURE_LOCATION="swedencentral"
+    export AZURE_AI_ACCOUNT_NAME="aif-swecen-bsmj-claude"
+    export AZURE_AI_PROJECT_NAME="proj-default"
+    export ASSIGN_LOCAL_USER_FOUNDRY_ROLE="false"
+    export ENABLE_HOSTED_AGENTS="false"
+    export AZURE_PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv)
+    az deployment group create --resource-group rg-swo-ds-sandbox-lab --name trail-guide-infra --parameters infra/main.bicepparam
     ```
 
-    > **Note**: If `azd up` fails because the default model deployment is unavailable in your region, update the `aiProjectDeploymentsJson` block in `infra/main.bicep` to a compatible model and rerun the command.
+    > **Note**: If the deployment fails because the default model is unavailable in your region, update the `aiProjectDeploymentsJson` block in `infra/main.bicep` to a compatible model and rerun the deployment command.
 
-    When prompted, provide:
-    - **Environment name** (e.g., `dev`, `test`) - Used to name all resources
-    - **Azure subscription** - Where resources will be created
-    - **Location** - Azure region (recommended: Sweden Central)
+    `AZURE_ENV_NAME` is used to tag and name the resources and `AZURE_LOCATION` sets the region (recommended: Sweden Central). Run `az account set --subscription <subscription-id>` first if you need a different subscription.
 
-    The command deploys the infrastructure from the `infra/` folder, creating:
-    - **Resource Group** - Container for all resources
-    - **Foundry (AI Services)** - The hub with access to models like GPT-5.1
-    - **Foundry Project** - Your workspace for creating and managing agents
+    The command deploys the `infra/` templates against existing resources:
+    - **Resource Group** - Existing `rg-swo-ds-sandbox-lab`, not created or modified
+    - **Foundry (AI Services)** - Existing account `aif-swecen-bsmj-claude`, reused as is
+    - **Foundry Project** - Existing project `proj-default`, reused as is
     - **Log Analytics Workspace** - Collects logs and telemetry data
     - **Application Insights** - Monitors agent performance and usage
 
 1. Create a `.env` file with the environment variables:
 
-    ```powershell
-    azd env get-values > .env
+    ```bash
+    az deployment group show --resource-group rg-swo-ds-sandbox-lab --name trail-guide-infra --query properties.outputs -o json \
+      | jq -r 'to_entries[] | "\(.key | ascii_upcase)=\"\(.value.value)\""' > .env
+    echo "AZURE_SUBSCRIPTION_ID=\"$(az account show --query id -o tsv)\"" >> .env
     ```
 
-    > ⚠️ **Important – File Encoding**
-    >
-    > After generating the `.env` file, make sure it is saved using **UTF-8** encoding.
-    >
-    > In editors like **VS Code**, check the encoding indicator in the bottom-right corner.  
-    > If it shows **UTF-16 LE** (or any encoding other than UTF-8), click it, choose **Save with Encoding**, and select **UTF-8**.
-    >
-    > Using the wrong encoding may cause environment variables to be read incorrectly.
 
     This creates a `.env` file in your project root with all the provisioned resource information.
 
@@ -133,14 +123,14 @@ With your Azure resources deployed, install the required Python packages to work
 
 1. In the VS Code terminal, create and activate a virtual environment:
 
-    ```powershell
+    ```bash
     python -m venv .venv
-    .venv/Scripts/Activate.ps1
+    source .venv/bin/activate
     ```
 
 1. Install the required dependencies:
 
-    ```powershell
+    ```bash
     python -m pip install -r requirements.txt
     ```
 
@@ -160,7 +150,7 @@ Start by deploying the first version of the trail guide agent.
 
 1. In the VS Code terminal, navigate to the trail guide agent directory:
 
-    ```powershell
+    ```bash
     cd src/agents/trail_guide_agent
     ```
 
@@ -176,7 +166,7 @@ Start by deploying the first version of the trail guide agent.
 
 1. Run the agent creation script:
 
-    ```powershell
+    ```bash
     python trail_guide_agent.py
     ```
 
@@ -194,12 +184,12 @@ Start by deploying the first version of the trail guide agent.
     >
     > Before committing, Git requires your identity to be configured. 
     > Run the following commands in the terminal, replacing the values with your GitHub username and email:
-    > ```powershell
+    > ```bash
     > git config --global user.name "Your GitHub Username"
     > git config --global user.email "your-email@example.com"
     > ```
 
-    ```powershell
+    ```bash
     git add trail_guide_agent.py
     git commit -m "Deploy trail guide agent V1"
     git tag v1
@@ -236,7 +226,7 @@ Next, deploy a second version with enhanced capabilities.
 
 1. Run the agent creation script:
 
-     ```powershell
+     ```bash
      python trail_guide_agent.py
      ```
 
@@ -250,7 +240,7 @@ Next, deploy a second version with enhanced capabilities.
 
 1. Commit your changes and tag the version:
 
-    ```powershell
+    ```bash
     git add trail_guide_agent.py
     git commit -m "Deploy trail guide agent V2 with enhanced capabilities"
     git tag v2
@@ -274,7 +264,7 @@ Finally, deploy the third version with production-ready features.
 
 1. Run the agent creation script:
 
-    ```powershell
+    ```bash
     python trail_guide_agent.py
     ```
 
@@ -288,7 +278,7 @@ Finally, deploy the third version with production-ready features.
 
 1. Commit your changes and tag the version:
 
-    ```powershell
+    ```bash
     git add trail_guide_agent.py
     git commit -m "Deploy trail guide agent V3 with production features"
     git tag v3
@@ -304,7 +294,7 @@ Examine your Git tags to see the version history.
 
 1. View all version tags:
 
-    ```powershell
+    ```bash
     git tag
     ```
 
@@ -317,7 +307,7 @@ Examine your Git tags to see the version history.
 
 1. View the commit history with tags:
 
-    ```powershell
+    ```bash
     git log --oneline --decorate
     ```
 
@@ -347,15 +337,7 @@ Examine the prompt files to understand how each version evolved.
 
 ## Clean up
 
-To avoid incurring unnecessary Azure costs, delete the resources you created in this exercise.
-
-1. In the VS Code terminal, run the following command:
-
-    ```powershell
-    azd down
-    ```
-
-1. When prompted, confirm that you want to delete the resources.
+The resource group and Foundry account are shared, so do not delete them. The agent and its versions you created cost nothing while idle; no further cleanup is required.
 
 ## Next steps
 

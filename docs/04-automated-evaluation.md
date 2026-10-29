@@ -32,7 +32,7 @@ To complete the tasks in this exercise, you need:
 - Azure subscription with Microsoft Foundry access
 - Git and [GitHub](https://github.com) account
 - Python 3.9 or later
-- Azure CLI and Azure Developer CLI (azd) installed
+- Azure CLI installed
 
 > **Tip**: If you haven't installed these prerequisites yet, see [Lab 00: Prerequisites](00-prerequisites.md) for installation instructions and links.
 
@@ -58,24 +58,13 @@ After creating your repository, clone it to your local machine.
 1. Select a location on your local machine to clone the repository.
 1. When prompted, select **Open** to open the cloned repository in VS Code.
 
-### Install the required azd extension
-
-`azure.yaml` in this template declares a required azd extension, and `azd up` fails on a machine that does not have it installed.
-
-1. List the extensions you already have, and install the one this template needs:
-
-    ```powershell
-    azd extension list --installed
-    azd extension install azure.ai.agents
-    ```
-
 ### Check model availability in your region
 
 The template deploys `gpt-5-mini` on the `GlobalStandard` SKU. Model and SKU availability varies by region, so confirm your choice exists before provisioning.
 
 1. Sign in and list the models offered in your region:
 
-    ```powershell
+    ```bash
     az login
     az cognitiveservices model list -l swedencentral --query "[?contains(model.name,'gpt-5')].{name:model.name, ver:model.version, sku:model.skus[0].name}" -o table
     ```
@@ -84,7 +73,7 @@ The template deploys `gpt-5-mini` on the `GlobalStandard` SKU. Model and SKU ava
 
 1. Confirm you have quota for the model you intend to use:
 
-    ```powershell
+    ```bash
     az cognitiveservices usage list -l swedencentral --query "[?contains(name.value,'GlobalStandard') && contains(name.value,'5-mini')].{name:name.value,used:currentValue,limit:limit}" -o table
     ```
 
@@ -94,21 +83,13 @@ The template deploys `gpt-5-mini` on the `GlobalStandard` SKU. Model and SKU ava
 
 ### Deploy Microsoft Foundry resources
 
-Now you'll use the Azure Developer CLI to deploy all required Azure resources.
+Now you'll use the Azure CLI to deploy all required Azure resources.
 
 1. In Visual Studio Code, open a terminal by selecting **Terminal** > **New Terminal** from the menu.
 
-1. Authenticate with Azure Developer CLI:
-
-    ```powershell
-    azd auth login
-    ```
-
-    This opens a browser window for Azure authentication. Sign in with your Azure credentials.
-
 1. Authenticate with Azure CLI:
 
-    ```powershell
+    ```bash
     az login
     ```
 
@@ -117,53 +98,42 @@ Now you'll use the Azure Developer CLI to deploy all required Azure resources.
     > ⚠️ **Important**
     > In some environments, the VS Code integrated terminal may crash or close during the interactive login flow.
     > If this happens, use device code authentication instead:
-    > ```powershell
+    > ```bash
     > az login --use-device-code
     > ```
 
-1. Provision resources:
+1. Deploy into the existing resource group, reusing the existing Foundry account and project:
 
-    ```powershell
-    azd up
+    ```bash
+    export AZURE_ENV_NAME="trail-guide"
+    export AZURE_LOCATION="swedencentral"
+    export AZURE_AI_ACCOUNT_NAME="aif-swecen-bsmj-claude"
+    export AZURE_AI_PROJECT_NAME="proj-default"
+    export ASSIGN_LOCAL_USER_FOUNDRY_ROLE="false"
+    export ENABLE_HOSTED_AGENTS="false"
+    export AZURE_PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv)
+    az deployment group create --resource-group rg-swo-ds-sandbox-lab --name trail-guide-infra --parameters infra/main.bicepparam
     ```
 
-    > **Note**: If `azd up` fails because the model deployment is unavailable in your region, revisit **Check model availability in your region** above, update the `aiProjectDeploymentsJson` block in `infra/main.bicep`, and rerun the command.
+    > **Note**: If the deployment fails because the model is unavailable in your region, revisit **Check model availability in your region** above, update the `aiProjectDeploymentsJson` block in `infra/main.bicep`, and rerun the deployment command.
 
-    > **Tip**: To provision without the interactive prompts, create the environment first:
-    > ```powershell
-    > azd env new <env-name> --subscription <subscription-id> --location swedencentral
-    > azd up --no-prompt
-    > ```
+    `AZURE_ENV_NAME` is used to tag and name the resources and `AZURE_LOCATION` sets the region (recommended: Sweden Central). Run `az account set --subscription <subscription-id>` first if you need a different subscription.
 
-    When prompted, provide:
-    - **Environment name** (e.g., `dev`, `test`) - Used to name all resources
-    - **Azure subscription** - Where resources will be created
-    - **Location** - Azure region (recommended: Sweden Central)
-
-    The command deploys the infrastructure from the `infra\` folder, creating:
-    - **Resource Group** - Container for all resources
-    - **Foundry (AI Services)** - The hub with access to models such as GPT-5.1
-    - **Foundry Project** - Your workspace for creating and managing prompts
+    The command deploys the `infra/` templates against existing resources:
+    - **Resource Group** - Existing `rg-swo-ds-sandbox-lab`, not created or modified
+    - **Foundry (AI Services)** - Existing account `aif-swecen-bsmj-claude`, reused as is
+    - **Foundry Project** - Existing project `proj-default`, reused as is
     - **Log Analytics Workspace** - Collects logs and telemetry data
     - **Application Insights** - Monitors performance and usage
-    - **Container Registry** - Created because `enableHostedAgents` defaults to `true`. This exercise does not use hosted agents; set `ENABLE_HOSTED_AGENTS=false` in your azd environment to skip it and the capability host step it provisions.
 
 1. Create a `.env` file with the environment variables:
 
-    ```powershell
-    azd env get-values | Out-File .env -Encoding utf8
+    ```bash
+    az deployment group show --resource-group rg-swo-ds-sandbox-lab --name trail-guide-infra --query properties.outputs -o json \
+      | jq -r 'to_entries[] | "\(.key | ascii_upcase)=\"\(.value.value)\""' > .env
+    echo "AZURE_SUBSCRIPTION_ID=\"$(az account show --query id -o tsv)\"" >> .env
     ```
 
-    > ⚠️ **Important – File Encoding**
-    >
-    > `Out-File -Encoding utf8` is used instead of `> .env` because the redirect writes **UTF-16 LE** in Windows PowerShell 5.1, which causes the variables to be read incorrectly.
-    >
-    > If you used the redirect, make sure the `.env` file is saved using **UTF-8** encoding.
-    >
-    > In editors like **VS Code**, check the encoding indicator in the bottom-right corner.  
-    > If it shows **UTF-16 LE** (or any encoding other than UTF-8), click it, choose **Save with Encoding**, and select **UTF-8**.
-    >
-    > Using the wrong encoding may cause environment variables to be read incorrectly.
 
     This creates a `.env` file in your project root with all the provisioned resource information.
 
@@ -173,22 +143,22 @@ With your Azure resources deployed, install the required Python packages.
 
 1. In the VS Code terminal, create and activate a virtual environment:
 
-    ```powershell
+    ```bash
     python -m venv .venv
-    .venv\Scripts\Activate.ps1
+    source .venv/bin/activate
     ```
 
 1. Add the virtual environment to `.gitignore`.
 
-    The repository's `.gitignore` already covers `.env` and `.azure/`, but not `.venv/`, so a later `git add .` would commit the whole virtual environment:
+    The repository's `.gitignore` already covers `.env`, but not `.venv/`, so a later `git add .` would commit the whole virtual environment:
 
-    ```powershell
+    ```bash
     Add-Content .gitignore "`n# Local Python environment`n.venv/`n__pycache__/"
     ```
 
 1. Install the required dependencies:
 
-    ```powershell
+    ```bash
     python -m pip install -r requirements.txt
     ```
 
@@ -207,20 +177,6 @@ With your Azure resources deployed, install the required Python packages.
     ```
 
     > **Note**: Set `MODEL_NAME` to the model deployment you created during provisioning.
-
-1. On Windows, set the console encoding for this terminal session:
-
-    ```powershell
-    $env:PYTHONIOENCODING = "utf-8"
-    ```
-
-    `evaluate_agent.py` prints a `✓` character in its progress output. Python on Windows encodes stdout using the system code page (cp1252) and the script stops partway through with:
-
-    ```
-    Error: 'charmap' codec can't encode character '✓' in position 2: character maps to <undefined>
-    ```
-
-    The failure happens after the dataset upload, so it can look like an upload or permissions problem when it is purely an encoding one.
 
 ## Understand the evaluation workflow
 
@@ -275,7 +231,7 @@ First, examine the prepared dataset structure.
 
 1. View the first few entries in the dataset:
 
-    ```powershell
+    ```bash
     Get-Content data/trail_guide_evaluation_dataset.jsonl -Head 3
     ```
 
@@ -287,7 +243,7 @@ First, examine the prepared dataset structure.
 
 1. Count total entries in the dataset:
 
-    ```powershell
+    ```bash
     (Get-Content data/trail_guide_evaluation_dataset.jsonl).Count
     ```
 
@@ -317,7 +273,7 @@ Execute the complete evaluation pipeline with one command.
 
     Run the evaluation script to execute the complete evaluation pipeline:
 
-    ```powershell
+    ```bash
     python src/evaluators/evaluate_agent.py
     ```
 
@@ -404,13 +360,13 @@ Execute the complete evaluation pipeline with one command.
     > **Note**: Evaluation runtime varies based on dataset size, model capacity, regional demand, and quota. For 89 items, 15-60+ minutes is not unusual, and constrained environments can take longer. If the script remains in `polling for completion` without an error, the cloud evaluation is usually still running.
 
     > **Tip**: For an initial smoke test, evaluate a smaller dataset first so you can validate authentication, dataset upload, evaluator setup, and scoring in about two minutes instead of waiting for the full 89-item run:
-    > ```powershell
+    > ```bash
     > $rows = Get-Content data/trail_guide_evaluation_dataset.jsonl -Head 5
     > Set-Content data/trail_guide_evaluation_dataset.jsonl -Value $rows -Encoding utf8
     > ```
     > Restore the full dataset with `git restore data/trail_guide_evaluation_dataset.jsonl`. The script uploads the dataset as version `1` and Foundry refuses to reuse a name and version with different contents, so bump `dataset_version` in the script when you switch back to the full set.
 
-    > **Note**: If this first run fails during dataset upload with `('Connection aborted.', ConnectionResetError(10054, ...))`, the role assignment from `azd up` has not finished propagating. Wait a minute and run the script again.
+    > **Note**: If this first run fails during dataset upload with `('Connection aborted.', ConnectionResetError(10054, ...))`, the role assignment from the deployment has not finished propagating. Wait a minute and run the script again.
 
 1. **Commit the results file**
 
@@ -418,12 +374,12 @@ Execute the complete evaluation pipeline with one command.
 
     If Git reports `Author identity unknown`, configure your identity once before committing:
 
-    ```powershell
+    ```bash
     git config --global user.name "Your GitHub Username"
     git config --global user.email "your-email@example.com"
     ```
 
-    ```powershell
+    ```bash
     git add evaluation_results.txt
     git commit -m "Add evaluation results"
     git push
@@ -466,14 +422,14 @@ The evaluation script integrates with GitHub Actions to automatically run evalua
     > **Important - Tenant alignment**
     >
     > Before creating the service principal, make sure your Azure CLI session is using the same tenant as the subscription that holds your Foundry resources:
-    > ```powershell
+    > ```bash
     > az account show --query "{subscription:id, tenant:tenantId}" -o table
     > ```
     > If needed, switch to the correct tenant and subscription before continuing. Creating the app in the wrong tenant is a common cause of OIDC sign-in failures later.
 
     Create a service principal for GitHub Actions:
 
-    ```powershell
+    ```bash
     az ad sp create-for-rbac --name "github-agent-evaluator" --create-password false
     ```
 
@@ -483,28 +439,28 @@ The evaluation script integrates with GitHub Actions to automatically run evalua
 
     Assign the **Foundry User** role so the service principal can call the Foundry project API:
 
-    ```powershell
-    az role assignment create `
-      --assignee "<appId>" `
-      --role "Foundry User" `
+    ```bash
+    az role assignment create \
+      --assignee "<appId>" \
+      --role "Foundry User" \
       --scope "/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.CognitiveServices/accounts/<ai-account-name>"
     ```
 
     > **Note**: Use the `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, and `AZURE_AI_ACCOUNT_NAME` values from your `.env` file to fill in the scope. If your workflow later fails during dataset upload with a permission error, verify the role assignment at this Cognitive Services account scope.
 
-    > **Tip**: Run this in **PowerShell**, not Git Bash. Git Bash rewrites the leading `/subscriptions/...` scope into a Windows path, and the command fails with `MissingSubscription`. If the directory lookup for `--assignee` also fails, pass the object ID instead:
-    > ```powershell
-    > $objectId = az ad sp show --id "<appId>" --query id -o tsv
-    > az role assignment create `
-    >   --assignee-object-id $objectId `
-    >   --assignee-principal-type ServicePrincipal `
-    >   --role "Foundry User" `
+    > **Tip**: If the directory lookup for `--assignee` fails, pass the object ID instead:
+    > ```bash
+    > objectId=$(az ad sp show --id "<appId>" --query id -o tsv)
+    > az role assignment create \
+    >   --assignee-object-id "$objectId" \
+    >   --assignee-principal-type ServicePrincipal \
+    >   --role "Foundry User" \
     >   --scope "/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.CognitiveServices/accounts/<ai-account-name>"
     > ```
 
     Verify the assignment before continuing:
 
-    ```powershell
+    ```bash
     az role assignment list --all --assignee "<appId>" --query "[].{role:roleDefinitionName,scope:scope}" -o table
     ```
 
@@ -523,9 +479,9 @@ The evaluation script integrates with GitHub Actions to automatically run evalua
     }
     ```
 
-    ```powershell
-    az ad app federated-credential create `
-      --id "<appId>" `
+    ```bash
+    az ad app federated-credential create \
+      --id "<appId>" \
       --parameters @federated-credential.json
     Remove-Item federated-credential.json
     ```
@@ -543,9 +499,9 @@ The evaluation script integrates with GitHub Actions to automatically run evalua
     }
     ```
 
-    ```powershell
-    az ad app federated-credential create `
-      --id "<appId>" `
+    ```bash
+    az ad app federated-credential create \
+      --id "<appId>" \
       --parameters @federated-credential-pr.json
     Remove-Item federated-credential-pr.json
     ```
@@ -558,13 +514,13 @@ The evaluation script integrates with GitHub Actions to automatically run evalua
 
     Read the subject GitHub actually sent from the failed run's log:
 
-    ```powershell
+    ```bash
     gh run view <run-id> --repo <your-org>/<your-repo> --log | Select-String "subject claim"
     ```
 
     Then create one more credential per trigger type using that exact string:
 
-    ```powershell
+    ```bash
     @"
     {
       "name": "github-actions-immutable",
@@ -597,7 +553,7 @@ The evaluation script integrates with GitHub Actions to automatically run evalua
 
     The same configuration from the command line:
 
-    ```powershell
+    ```bash
     gh secret set AZURE_CLIENT_ID --body "<appId>"
     gh secret set AZURE_TENANT_ID --body "<tenant>"
     gh secret set AZURE_SUBSCRIPTION_ID --body "<subscription-id>"
@@ -620,7 +576,7 @@ The evaluation script integrates with GitHub Actions to automatically run evalua
 
     The workflow runs automatically when a PR modifies files under `src/agents/trail_guide_agent/`. To test it, create a branch, make a small change, and open a PR:
 
-    ```powershell
+    ```bash
     git checkout -b test/trigger-evaluation
     # Make a small change to any agent file, for example:
     code src/agents/trail_guide_agent/prompts/v1_instructions.txt
@@ -665,7 +621,7 @@ Document your findings and create an analysis report.
 
 1. Create a results directory:
 
-    ```powershell
+    ```bash
     New-Item -ItemType Directory -Path experiments/automated -Force
     New-Item -ItemType File -Path experiments/automated/evaluation_analysis.md
     ```
@@ -741,7 +697,7 @@ Document your findings and create an analysis report.
 
 1. Save the file and commit your analysis:
 
-    ```powershell
+    ```bash
     git add experiments/automated/
     git commit -m "Complete automated evaluation analysis"
     ```
@@ -790,41 +746,25 @@ Create `experiments/automated/model_comparison.md` with:
 
 The resources you provisioned continue to bill after the exercise ends. When you're finished, delete them.
 
-1. Remove everything the template created:
+1. Do not delete `rg-swo-ds-sandbox-lab` or the Foundry account; they are shared. Remove only the monitoring resources you deployed, if you no longer need them:
 
-    ```powershell
-    azd down --purge --force
+    ```bash
+    az monitor app-insights component delete --resource-group rg-swo-ds-sandbox-lab --app <app-insights-name>
     ```
-
-    `--purge` matters for the Foundry (AI Services) account: without it the account is soft-deleted and its name remains reserved.
 
 1. Remove the service principal if you created one for GitHub Actions:
 
-    ```powershell
+    ```bash
     az ad sp delete --id "<appId>"
     ```
 
 ## Troubleshooting
-
-### Script stops with a `charmap` codec error
-
-**Symptom**: `Error: 'charmap' codec can't encode character '✓' in position 2: character maps to <undefined>`.
-
-**Resolution**: Set `$env:PYTHONIOENCODING = "utf-8"` before running the script. This is an encoding failure in the progress output on Windows, not an Azure error.
 
 ### Evaluation completes but reports "No scores returned"
 
 **Symptom**: The run finishes with `Errored items: 0`, the Foundry portal shows scores, but the script prints `No scores returned`.
 
 **Resolution**: Ensure `retrieve_and_display_results` reads scores from `item.results`, where each entry carries `metric` (or `name`) and a numeric `score`. Older copies of the script read `item.evaluator_outputs`, which the Evals API does not return.
-
-### `MissingSubscription` from `az role assignment create`
-
-**Symptom**: `(MissingSubscription) The request did not have a subscription or a valid tenant level resource provider.`
-
-**Resolution**:
-- Run the command in **PowerShell**. Git Bash rewrites the leading `/subscriptions/...` scope into a Windows path
-- If the directory lookup for `--assignee` fails, use `--assignee-object-id` together with `--assignee-principal-type ServicePrincipal`
 
 ### Push to your own repository is rejected
 
@@ -851,7 +791,7 @@ The resources you provisioned continue to bill after the exercise ends. When you
 - Run `az login` to refresh Azure credentials
 - Verify the service principal has the **Foundry User** role at the CognitiveServices account scope — this role has `Microsoft.CognitiveServices/*` wildcard data actions required for `AIServices/agents/write`. `Foundry Developer` alone is **not sufficient**
 - Check `AZURE_AI_PROJECT_ENDPOINT` in `.env` file is correct and includes `/api/projects/<project>`
-- If the first run happens immediately after `azd up`, wait 1-2 minutes and retry once so the role assignment can propagate
+- If the first run happens immediately after the deployment, wait 1-2 minutes and retry once so the role assignment can propagate
 
 ### OIDC app created in the wrong tenant
 
@@ -878,7 +818,7 @@ Repositories that issue immutable subject claims present a third shape, embeddin
 
 Create the missing PR credential:
 
-```powershell
+```bash
 # Create federated-credential-pr.json
 @"
 {
@@ -889,8 +829,8 @@ Create the missing PR credential:
 }
 "@ | Set-Content federated-credential-pr.json
 
-az ad app federated-credential create `
-  --id "<appId>" `
+az ad app federated-credential create \
+  --id "<appId>" \
   --parameters @federated-credential-pr.json
 
 Remove-Item federated-credential-pr.json

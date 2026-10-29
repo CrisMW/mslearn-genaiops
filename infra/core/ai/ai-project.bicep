@@ -34,6 +34,9 @@ param enableMonitoring bool = true
 @description('Enable hosted agent deployment')
 param enableHostedAgents bool = false
 
+// Set to false when the user already holds Foundry User on the account under a different assignment name.
+param assignLocalUserFoundryRole bool = true
+
 // Load abbreviations
 var abbrs = loadJsonContent('../../abbreviations.json')
 
@@ -83,7 +86,7 @@ resource aiAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
     allowProjectManagement: true
     customSubDomainName: !empty(existingAiAccountName) ? existingAiAccountName : 'ai-account-${resourceToken}'
     publicNetworkAccess: 'Enabled'
-    disableLocalAuth: true
+    disableLocalAuth: false
     networkAcls: {
       defaultAction: 'Allow'
       virtualNetworkRules: []
@@ -155,7 +158,7 @@ module aiConnections './connection.bicep' = [for (connection, index) in connecti
 // Foundry User (53ca6127-db72-4b80-b1b0-d745d6d5456d) has Microsoft.CognitiveServices/* wildcard
 // data actions, covering the Foundry project API access needed by this lab.
 // Assign at the account scope so it applies to all projects under this account.
-resource localUserAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource localUserAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (assignLocalUserFoundryRole) {
   scope: aiAccount
   name: guid(subscription().id, resourceGroup().id, principalId, '53ca6127-db72-4b80-b1b0-d745d6d5456d')
   properties: {

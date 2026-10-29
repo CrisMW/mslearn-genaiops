@@ -14,7 +14,7 @@ This exercise takes approximately **20 minutes**.
 
 ## Introduction
 
-In this exercise, you'll set up the foundational infrastructure needed for developing and deploying generative AI applications. You'll use the Azure Developer CLI (azd) to provision a Microsoft Foundry hub and project, along with supporting resources like Application Insights for monitoring.
+In this exercise, you'll set up the foundational infrastructure needed for developing and deploying generative AI applications. You'll use the Azure CLI to provision a Microsoft Foundry hub and project, along with supporting resources like Application Insights for monitoring.
 
 You'll authenticate with Azure, provision all required cloud resources, and install the necessary Python dependencies. This will prepare your environment for building AI agents and applications in subsequent labs.
 
@@ -42,22 +42,14 @@ To complete the tasks in this exercise, you'll create your own repository from t
 
 ### Deploy Microsoft Foundry resources
 
-You'll use the Azure Developer CLI to deploy all required Azure resources using the infrastructure files provided in this repository.
+You'll use the Azure CLI to deploy all required Azure resources using the infrastructure files provided in this repository.
 
-> **Note**: This repository includes pre-configured infrastructure files (`azure.yaml` and `infra/` folder) that define all the Azure resources needed for this lab.
+> **Note**: This repository includes pre-configured infrastructure files (the `infra/` folder) that define all the Azure resources needed for this lab.
 
 1. In Visual Studio Code, open a new terminal by selecting **Terminal** > **New Terminal** from the menu.
-1. Authenticate with Azure Developer CLI:
-
-    ```powershell
-    azd auth login
-    ```
-
-    This opens a browser window for Azure authentication. Sign in with your Azure credentials.
-
 1. Authenticate with Azure CLI:
 
-    ```powershell
+    ```bash
     az login
     ```
 
@@ -66,37 +58,33 @@ You'll use the Azure Developer CLI to deploy all required Azure resources using 
     > ⚠️ **Important**
     > In some environments, the VS Code integrated terminal may crash or close during the interactive login flow.
     > If this happens, use device code authentication instead:
-    > ```powershell
+    > ```bash
     > az login --use-device-code
     > ```
 
-1. Provision resources:
+1. Deploy into the existing resource group, reusing the existing Foundry account and project:
 
-    ```powershell
-    azd up
+    ```bash
+    export AZURE_ENV_NAME="trail-guide"
+    export AZURE_LOCATION="swedencentral"
+    export AZURE_AI_ACCOUNT_NAME="aif-swecen-bsmj-claude"
+    export AZURE_AI_PROJECT_NAME="proj-default"
+    export ASSIGN_LOCAL_USER_FOUNDRY_ROLE="false"
+    export ENABLE_HOSTED_AGENTS="false"
+    export AZURE_PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv)
+    az deployment group create --resource-group rg-swo-ds-sandbox-lab --name trail-guide-infra --parameters infra/main.bicepparam
     ```
 
-    > **Note**: If `azd up` fails because the default model deployment is unavailable in your region, update the `aiProjectDeploymentsJson` block in `infra/main.bicep` to a compatible model and rerun the command.
+    > **Note**: If the deployment fails because the default model is unavailable in your region, update the `aiProjectDeploymentsJson` block in `infra/main.bicep` to a compatible model and rerun the deployment command.
 
-    When prompted, provide:
-    - **Environment name** (e.g., `dev-trail-guide`) - Used to name all resources
-    - **Azure subscription** - Where resources will be created
-    - **Location** - Azure region (recommended: Sweden Central)
+    `AZURE_ENV_NAME` is used to tag and name the resources and `AZURE_LOCATION` sets the region (recommended: Sweden Central). Run `az account set --subscription <subscription-id>` first if you need a different subscription.
 
-    The command deploys the Bicep templates from the `infra/` folder. You'll see output like:
-
-    ```
-    (✓) Done: Resource group: rg-trail-gd-dev-trailguide-pr
-    (✓) Done: Foundry: ai-account-pq7b5wqaoqljc
-    (✓) Done: Log Analytics workspace: logs-pq7b5wqaoqljc
-    (✓) Done: Foundry project: ai-account-pq7b5wqaoqljc/ai-project-dev-trail
-    (✓) Done: Application Insights: appi-pq7b5wqaoqljc
-    ```
+    The command deploys the Bicep templates from the `infra/` folder.
 
     **Resources created:**
-    - **Resource Group** - Container for all resources (e.g., `rg-trail-gd-dev-trailguide-pr`)
-    - **Foundry (AI Services)** - The hub with access to Global Standard models like GPT-5.1 (the exact model can vary by region and availability)
-    - **Foundry Project** - Your workspace for creating and managing agents
+    - **Resource Group** - Existing `rg-swo-ds-sandbox-lab`, not created or modified
+    - **Foundry (AI Services)** - Existing account `aif-swecen-bsmj-claude`, reused as is
+    - **Foundry Project** - Existing project `proj-default`, reused as is
     - **Log Analytics Workspace** - Collects logs and telemetry data
     - **Application Insights** - Monitors agent performance and usage
 
@@ -104,18 +92,12 @@ You'll use the Azure Developer CLI to deploy all required Azure resources using 
 
 1. Create a `.env` file with the environment variables:
 
-    ```powershell
-    azd env get-values > .env
+    ```bash
+    az deployment group show --resource-group rg-swo-ds-sandbox-lab --name trail-guide-infra --query properties.outputs -o json \
+      | jq -r 'to_entries[] | "\(.key | ascii_upcase)=\"\(.value.value)\""' > .env
+    echo "AZURE_SUBSCRIPTION_ID=\"$(az account show --query id -o tsv)\"" >> .env
     ```
     
-    > ⚠️ **Important – File Encoding**
-    >
-    > After generating the `.env` file, make sure it is saved using **UTF-8** encoding.
-    >
-    > In editors like **VS Code**, check the encoding indicator in the bottom-right corner.  
-    > If it shows **UTF-16 LE** (or any encoding other than UTF-8), click it, choose **Save with Encoding**, and select **UTF-8**.
-    >
-    > Using the wrong encoding may cause environment variables to be read incorrectly
 
 
     This creates a `.env` file in your project root with all the provisioned resource information:
@@ -131,14 +113,14 @@ Install the required Python packages to work with Microsoft Foundry in your appl
 
 1. In the VS Code terminal, create and activate a virtual environment:
 
-    ```powershell
+    ```bash
     python -m venv .venv
-    .venv/Scripts/Activate.ps1
+    source .venv/bin/activate
     ```
 
 1. Install the required dependencies:
 
-    ```powershell
+    ```bash
     python -m pip install -r requirements.txt
     ```
 
@@ -170,13 +152,13 @@ Deploy the initial version of the Trail Guide Agent to Microsoft Foundry.
 
 1. In the VS Code terminal, navigate to the agent directory:
 
-    ```powershell
+    ```bash
     cd src/agents/trail_guide_agent
     ```
 
 1. Run the agent creation script:
 
-    ```powershell
+    ```bash
     python trail_guide_agent.py
     ```
 
@@ -192,13 +174,13 @@ Interact with your deployed agent from the terminal to verify it's working corre
 
 1. In the VS Code terminal, navigate back to the repository root:
 
-    ```powershell
+    ```bash
     cd ../../..
     ```
 
 1. Run the interactive test script:
 
-    ```powershell
+    ```bash
     python src/tests/interact_with_agent.py
     ```
 
@@ -226,33 +208,6 @@ After deployment completes, verify that all resources are accessible and your ag
 1. In the home page, select your newly created project from the list.
 1. In the left navigation, select **Agents** to see your deployed Trail Guide Agent.
 1. Verify you can see your agent (e.g., `trail-guide`) in the list.
-
-## (OPTIONAL) Explore the Microsoft Foundry starter template
-
-If you have extra time and want to explore alternative project structures, you can experiment with the official Microsoft Foundry starter template.
-
-This is a stretch exercise designed to help you understand different approaches to structuring AI projects.
-
-1. In a **new directory** (outside of this lab), initialize a new project from the starter template:
-
-    ```powershell
-    mkdir ai-foundry-exploration
-    cd ai-foundry-exploration
-    azd init --template Azure-Samples/ai-foundry-starter-basic
-    ```
-
-1. Review the generated files and compare them to the structure used in this lab:
-    - `azure.yaml` - Project configuration
-    - `infra/` - Infrastructure as Code (Bicep) files
-    - Additional sample code and configurations
-
-1. *Optionally*, you can deploy this template to a separate Azure environment to see how it compares:
-
-    ```powershell
-    azd up
-    ```
-
-    > **Important**: This will create additional Azure resources and may incur costs. Be sure to clean up resources when done by running `azd down`.
 
 ## Where to find other labs
 

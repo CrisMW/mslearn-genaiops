@@ -2,9 +2,6 @@
     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
-      "resourceGroupName": {
-        "value": "${AZURE_RESOURCE_GROUP}"
-      },
       "environmentName": {
         "value": "${AZURE_ENV_NAME}"
       },
@@ -18,7 +15,7 @@
         "value": "${AZURE_AI_PROJECT_NAME}"
       },
       "aiDeploymentsLocation": {
-        "value": "${AZURE_LOCATION}"
+        "value": "${AZURE_AI_DEPLOYMENTS_LOCATION=swedencentral}"
       },
       "principalId": {
         "value": "${AZURE_PRINCIPAL_ID}"
@@ -37,6 +34,9 @@
       },
       "enableHostedAgents": {
         "value": "${ENABLE_HOSTED_AGENTS=true}"
+      },
+      "assignLocalUserFoundryRole": {
+        "value": "${ASSIGN_LOCAL_USER_FOUNDRY_ROLE=true}"
       }
     }
 }

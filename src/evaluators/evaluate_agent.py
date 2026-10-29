@@ -444,7 +444,7 @@ def main() -> None:
             f"  - Check Azure credentials: az login\n"
             f"  - Ensure GPT-5.1 model is deployed and accessible\n"
             f"  - Ensure the caller has Foundry User access at the AI account scope\n"
-            f"  - If you just ran azd up, wait 1-2 minutes for role propagation and retry once\n"
+            f"  - If you just ran the deployment, wait 1-2 minutes for role propagation and retry once\n"
         )
         print(error_message)
         # Write the error to the results file so it's never left empty

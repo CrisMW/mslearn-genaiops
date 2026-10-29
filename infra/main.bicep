@@ -1,15 +1,9 @@
-targetScope = 'subscription'
-// targetScope = 'resourceGroup'
+targetScope = 'resourceGroup'
 
 @minLength(1)
 @maxLength(64)
 @description('Name of the environment that can be used as part of naming resource convention')
 param environmentName string
-
-@minLength(1)
-@maxLength(90)
-@description('Name of the resource group to use or create')
-param resourceGroupName string = 'rg-${environmentName}'
 
 // Restricted locations to match list from
 // https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/responses?tabs=python-key#region-availability
@@ -45,10 +39,6 @@ param resourceGroupName string = 'rg-${environmentName}'
 ])
 param location string
 
-@metadata({azd: {
-  type: 'location'
-  }
-})
 param aiDeploymentsLocation string
 
 @description('Id of the user or app to assign application roles')
@@ -97,23 +87,16 @@ param enableHostedAgents bool
 @description('Enable monitoring for the AI project')
 param enableMonitoring bool = true
 
+@description('Assign Foundry User to the local user. Set false if the user already has it on the account.')
+param assignLocalUserFoundryRole bool = true
+
 @description('Optional. Object ID of the GitHub Actions service principal to grant Foundry User role for CI/CD evaluation workflows.')
 param githubActionsPrincipalId string = ''
 
 // Tags that should be applied to all resources.
-// 
-// Note that 'azd-service-name' tags should be applied separately to service host resources.
-// Example usage:
-//   tags: union(tags, { 'azd-service-name': <service name in azure.yaml> })
 var tags = {
-  'azd-env-name': environmentName
-}
-
-// Check if resource group exists and create it if it doesn't
-resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
-  name: resourceGroupName
-  location: location
-  tags: tags
+  'environment-name': environmentName
+  CreatedBy: 'Cristóbal Marrero Winkens'
 }
 
 // Build dependent resources array conditionally
@@ -128,7 +111,6 @@ var dependentResources = (enableHostedAgents) && !hasAcr ? union(aiProjectDepend
 
 // AI Project module
 module aiProject 'core/ai/ai-project.bicep' = {
-  scope: rg
   name: 'ai-project'
   params: {
     tags: tags
@@ -142,12 +124,13 @@ module aiProject 'core/ai/ai-project.bicep' = {
     additionalDependentResources: dependentResources
     enableMonitoring: enableMonitoring
     enableHostedAgents: enableHostedAgents
+    assignLocalUserFoundryRole: assignLocalUserFoundryRole
     githubActionsPrincipalId: githubActionsPrincipalId
   }
 }
 
 // Resources
-output AZURE_RESOURCE_GROUP string = resourceGroupName
+output AZURE_RESOURCE_GROUP string = resourceGroup().name
 output AZURE_AI_ACCOUNT_ID string = aiProject.outputs.accountId
 output AZURE_AI_PROJECT_ID string = aiProject.outputs.projectId
 output AZURE_AI_FOUNDRY_PROJECT_ID string = aiProject.outputs.projectId
